@@ -55,33 +55,43 @@ func (g *GrpcClient) triggerConstantContract(ct *core.TriggerSmartContract) (*ap
 	return g.Client.TriggerConstantContract(ctx, ct)
 }
 
+func (g *GrpcClient) TriggerContractNoPay(from, contractAddress, method, jsonString string, feeLimit int64) (*api.TransactionExtention, error) {
+	return g.TriggerContract(from, contractAddress, method, jsonString, feeLimit, 0, "", 0)
+}
+
 // TriggerContract and return tx result
 func (g *GrpcClient) TriggerContract(from, contractAddress, method, jsonString string,
+	feeLimit, tAmount int64, tTokenID string, tTokenAmount int64) (*api.TransactionExtention, error) {
+	param, err := abi.LoadFromJSON(jsonString)
+	if err != nil {
+		return nil, err
+	}
+	dataBytes, err := abi.Pack(method, param)
+	if err != nil {
+		return nil, err
+	}
+	return g.TriggerContractWithPackedData(from, contractAddress, dataBytes, feeLimit, tAmount, tTokenID, tTokenAmount)
+}
+
+func (g *GrpcClient) TriggerContractWithPackedDataNoPay(from, contractAddress string, packedData []byte, feeLimit int64) (*api.TransactionExtention, error) {
+	return g.TriggerContractWithPackedData(from, contractAddress, packedData, feeLimit, 0, "", 0)
+}
+
+// TriggerContractWithPackedData you can build `packedData` with go-ethereum abi.Pack directly
+func (g *GrpcClient) TriggerContractWithPackedData(from, contractAddress string, packedData []byte,
 	feeLimit, tAmount int64, tTokenID string, tTokenAmount int64) (*api.TransactionExtention, error) {
 	fromDesc, err := address.Base58ToAddress(from)
 	if err != nil {
 		return nil, err
 	}
-
 	contractDesc, err := address.Base58ToAddress(contractAddress)
 	if err != nil {
 		return nil, err
 	}
-
-	param, err := abi.LoadFromJSON(jsonString)
-	if err != nil {
-		return nil, err
-	}
-
-	dataBytes, err := abi.Pack(method, param)
-	if err != nil {
-		return nil, err
-	}
-
 	ct := &core.TriggerSmartContract{
 		OwnerAddress:    fromDesc.Bytes(),
 		ContractAddress: contractDesc.Bytes(),
-		Data:            dataBytes,
+		Data:            packedData,
 	}
 	if tAmount > 0 {
 		ct.CallValue = tAmount
@@ -93,7 +103,6 @@ func (g *GrpcClient) TriggerContract(from, contractAddress, method, jsonString s
 			return nil, err
 		}
 	}
-
 	return g.triggerContract(ct, feeLimit)
 }
 
